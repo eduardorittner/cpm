@@ -1,2 +1,2 @@
 # cpm
-Simple terminal text editor
+Simple terminal based text editor written entirely in C
