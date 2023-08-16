@@ -4,9 +4,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
+
+#define CPM_VERSION "0.1"
 
 #define CTRL_KEY(k) ((k)&0x1f)
 
@@ -61,6 +64,20 @@ char read_key() {
   return c;
 }
 
+void buf_append(ap_buf *buf, const char *str, int len) {
+
+  char *new = realloc(buf->str, buf->len + len);
+
+  if (new == NULL) {
+    return;
+  }
+  memcpy(&new[buf->len], str, len);
+  buf->str = new;
+  buf->len += len;
+}
+
+void buf_free(ap_buf *buf) { free(buf->str); }
+
 int get_cursor_pos(uint8_t *rows, uint8_t *cols) {
 
   char buffer[32];
@@ -104,20 +121,46 @@ int window_size(uint8_t *rows, uint8_t *cols) {
   }
 }
 
-void draw_rows(editor_config config) {
+void draw_rows(ap_buf *buf) {
   for (int i = 0; i < config.screen_rows - 1; i++) {
-    write(STDOUT_FILENO, "~\r\n", 3);
+    if (i == config.screen_cols / 3) {
+      char welcome[80];
+      int len = snprintf(welcome, sizeof(welcome), "cpm editor -- version %s",
+                         CPM_VERSION);
+      buf_append(buf, "~ blablablabla\r\n", 17);
+      if (len > config.screen_cols) {
+        len = config.screen_cols;
+      }
+      int padding = (config.screen_cols - len) / 2;
+      if (padding) {
+        buf_append(buf, "~", 1);
+      }
+      while (padding--) {
+        buf_append(buf, welcome, len);
+      }
+    } else {
+      buf_append(buf, "~", 1);
+    }
+    buf_append(buf, "\x1b[K", 3);
+    buf_append(buf, "\r\n", 2);
   }
-  write(STDOUT_FILENO, "~", 1);
+  buf_append(buf, "~", 1);
 }
 
-void refresh_screen(editor_config config) {
-  write(STDOUT_FILENO, "\x1b[2J", 4);
-  write(STDOUT_FILENO, "\x1b[H", 3);
+void refresh_screen() {
+  ap_buf buf = ABUF_INIT;
 
-  draw_rows(config);
+  buf_append(&buf, "\x1b[?25l", 6);
+  buf_append(&buf, "\x1b[K", 4);
+  buf_append(&buf, "\x1b[H", 3);
 
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  draw_rows(&buf);
+
+  buf_append(&buf, "\x1b[H", 3);
+  buf_append(&buf, "\x1b[?25h", 6);
+
+  write(STDOUT_FILENO, buf.str, buf.len);
+  buf_free(&buf);
 }
 
 void process_keypress() {
@@ -131,7 +174,7 @@ void process_keypress() {
   }
 }
 
-void init_editor(editor_config config) {
+void init_editor() {
   if (window_size(&config.screen_rows, &config.screen_cols) == -1)
     die("get windows size");
 }

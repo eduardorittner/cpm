@@ -8,6 +8,15 @@ typedef struct {
   struct termios base_termios;
 } editor_config;
 
+typedef struct ap_buf {
+  char *str;
+  int len;
+} ap_buf;
+
+#define ABUF_INIT                                                              \
+  { NULL, 0 }
+
+
 extern editor_config config;
 
 void enableRawMode();
